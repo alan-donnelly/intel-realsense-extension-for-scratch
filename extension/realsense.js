@@ -4,7 +4,7 @@ INTEL CORPORATION PROPRIETARY INFORMATION
 This software is supplied under the terms of a license agreement or nondisclosure
 agreement with Intel Corporation and may not be copied or disclosed except in
 accordance with the terms of that agreement
-@licence Copyright(c) 2014-2015 Intel Corporation. All Rights Reserved.
+@licence Copyright(c) 2014-2016 Intel Corporation. All Rights Reserved.
 
 *******************************************************************************/
 var intel = intel || {};
@@ -30,6 +30,7 @@ intel._namespace = function (ns) {
 intel._namespace("intel.realsense");
 intel._namespace("intel.realsense.face");
 intel._namespace("intel.realsense.hand");
+intel._namespace("intel.realsense.cursor"); 
 intel._namespace("intel.realsense.blob");
 intel._namespace("intel.realsense.speech");
 
@@ -41,8 +42,8 @@ intel._namespace("intel.realsense.speech");
            activeVersion.major: default = releaseVersion.major but can be a lower major version
            activeVersion.majorMin: Minimal major version of web service, which this JS interface supports
 */
-intel.realsense.releaseVersion = { major: 6, minor: 0 };
-intel.realsense.activeVersion = { major: 6, majorMin: 5 };
+intel.realsense.releaseVersion = { major: 8, minor: 0 };
+intel.realsense.activeVersion = { major: 8, majorMin: 7 };
 
 /**
  * This table maps the relationship between the speech component versions and the
@@ -53,7 +54,9 @@ intel.realsense.activeVersion = { major: 6, majorMin: 5 };
  */
 intel.realsense.languagePackFor = {
     speechVersion: {
-        6: 5
+        6: 5,
+        7: 5,
+        8: 5
     }
 };
 
@@ -87,11 +90,14 @@ intel.realsense.Status = {
     STATUS_POWER_PROVIDER_NOT_EXISTS: -704,
     STATUS_CAPTURE_CONFIG_ALREADY_SET: -801,    /** parameter cannot be changed since configuration for capturing has been already set */
     STATUS_COORDINATE_SYSTEM_CONFLICT: -802,	/** Mismatched coordinate system between modules */
-    STATUS_WEB_DISCONNECTED: -901,               /** lost connection to web service, JS app needs restart */
-    STATUS_TIME_GAP: 101,                       /* time gap in time stamps */
-    STATUS_PARAM_INPLACE: 102,                  /* the same parameters already defined */
-    STATUS_DATA_NOT_CHANGED: 103,	            /* Data not changed (no new data available)*/
-    STATUS_PROCESS_FAILED: 104                  /* Module failure during processing */
+    STATUS_NOT_MATCHING_CALIBRATION:  -803,     /** calibration values not matching*/
+    STATUS_WEB_DISCONNECTED: -901,              /** lost connection to web service, JS app needs restart */
+    STATUS_TIME_GAP: 101,                       /** time gap in time stamps */
+    STATUS_PARAM_INPLACE: 102,                  /** the same parameters already defined */
+    STATUS_DATA_NOT_CHANGED: 103,	        /** Data not changed (no new data available)*/
+    STATUS_PROCESS_FAILED: 104,                 /** Module failure during processing */
+    STATUS_VALUE_OUT_OF_RANGE: 105,             /** Data value(s) out of range */
+    STATUS_DATA_PENDING: 106                    /** Not all data was copied, more data is available for fetching */
 };
 
 intel.realsense.Session = function (instance) {
@@ -284,6 +290,8 @@ intel.realsense.SenseManager = function (instance, session, captureManager) {
                 module = new intel.realsense.face.FaceModule(result2.instance.value, self);
             else if (mid == intel.realsense.hand.HandModule._CUID)
                 module = new intel.realsense.hand.HandModule(result2.instance.value, self);
+            else if (mid == intel.realsense.cursor.HandCursorModule._CUID)
+                module = new intel.realsense.cursor.HandCursorModule(result2.instance.value, self);
             else if (mid == intel.realsense.blob.BlobModule._CUID)
                 module = new intel.realsense.blob.BlobModule(result2.instance.value, self);
             else
@@ -308,6 +316,9 @@ intel.realsense.SenseManager = function (instance, session, captureManager) {
                     break;
                 case intel.realsense.hand.HandModule._CUID:
                     data = new intel.realsense.hand.HandData(response);
+                    break;
+                case intel.realsense.cursor.HandCursorModule._CUID:
+                    data = new intel.realsense.cursor.CursorData(response);
                     break;
                 case intel.realsense.blob.BlobModule._CUID:
                     data = new intel.realsense.blob.BlobData(response);
@@ -410,13 +421,14 @@ intel.realsense.StreamType = {
 intel.realsense.DeviceModel = {
     DEVICE_MODEL_GENERIC: 0x00000000, /* a generic device or unknown device */
     DEVICE_MODEL_F200: 0x0020000E,    /* the Intel(R) RealSense(TM) 3D Camera, model F200 */
-    DEVICE_MODEL_R200: 0x0020000F     /* the Intel(R) RealSense(TM) DS4 Camera, model R200 */
+    DEVICE_MODEL_R200: 0x0020000F,    /* the Intel(R) RealSense(TM) 3D Camera, model R200 */
+    DEVICE_MODEL_SR300: 0x00200010    /* The Intel(R) RealSense(TM) 3D Camera, model SR300 */
 };
 
 intel.realsense.DeviceOrientation = {
     DEVICE_ORIENTATION_ANY: 0x0,            /* Unknown orientation */
-    DEVICE_ORIENTATION_USER_FACING: 0x1,    /* A user facing camera */
-    DEVICE_ORIENTATION_WORLD_FACING: 0x2    /* A world facing camera */
+    DEVICE_ORIENTATION_FRONT_FACING: 0x1,   /* A user facing camera */
+    DEVICE_ORIENTATION_REAR_FACING: 0x2     /* A world facing camera */
 };  
  
 intel.realsense.Rotation = {
@@ -605,8 +617,10 @@ intel.realsense.face.ExpressionsData.FaceExpression = {
     EXPRESSION_EYES_DOWN: 18,
     EXPRESSION_TONGUE_OUT: 19,
 	EXPRESSION_PUFF_RIGHT: 20,
-    EXPRESSION_PUFF_LEFT: 21
+	EXPRESSION_PUFF_LEFT: 21
 };
+
+intel.realsense.face.FaceExpression = intel.realsense.face.ExpressionsData.FaceExpression;
 
 intel.realsense.face.AlertType = {
     ALERT_NEW_FACE_DETECTED: 1,	        //  a new face enters the FOV and its position and bounding rectangle is available. 
@@ -784,7 +798,8 @@ intel.realsense.hand.AlertType = {
     ALERT_HAND_OUT_OF_TOP_BORDER: 0x0400,    ///  The tracked object is touching the upper border of the field of view
     ALERT_HAND_OUT_OF_BOTTOM_BORDER: 0x0800, ///  The tracked object is touching the lower border of the field of view
     ALERT_HAND_TOO_FAR: 0x1000,         ///  The tracked object is too far
-    ALERT_HAND_TOO_CLOSE: 0x2000        ///  The tracked object is too close
+    ALERT_HAND_TOO_CLOSE: 0x2000,       ///  The tracked object is too close
+    ALERT_HAND_LOW_CONFIDENCE: 0x4000   ///  The tracked object is low confidence
 };
 
 intel.realsense.hand.GestureStateType = {     
@@ -794,8 +809,9 @@ intel.realsense.hand.GestureStateType = {
 };
 
 intel.realsense.hand.TrackingModeType = {
-    TRACKING_MODE_FULL_HAND: 0,	    /// Track the full skeleton
-    TRACKING_MODE_EXTREMITIES: 1	///<Unsupported> Track the extremities of the hand
+    TRACKING_MODE_FULL_HAND: 1,	    /// Track the full skeleton
+    TRACKING_MODE_EXTREMITIES: 2,	///<Unsupported> Track the extremities of the hand
+    TRACKING_MODE_CURSOR: 4
 };
 
 intel.realsense.hand.JointSpeedType = {
@@ -822,6 +838,131 @@ intel.realsense.hand.HandData.IHand = function (data) {
         }
     }
 };
+
+
+
+intel.realsense.cursor.HandCursorModule = function (instance, sense) {
+    var instance = instance;
+    var self = this;
+    this.sm = sense;
+
+    /** 
+        Create a new instance of the cursor-module's active configuration.
+        @return Configuration instance as a promise object
+    */
+    this.createActiveConfiguration = function () {
+        return intel.realsense.connection.call(instance, 'PXCMHandCursorModule_CreateActiveConfiguration').then(function (result) {
+            return new intel.realsense.cursor.CursorConfiguration(result.instance.value);
+        });
+    };
+};
+intel.realsense.cursor.HandCursorModule._CUID = 1313686344;
+
+
+intel.realsense.cursor.HandCursorModule.prototype.pause = function (pause) {
+    return this.sm._pauseModule(intel.realsense.cursor.HandCursorModule._CUID, pause);
+};
+
+/** default cursor data callback which can be overwritten by JS application */
+intel.realsense.cursor.HandCursorModule.prototype.onFrameProcessed = function (module, data) {
+};
+
+intel.realsense.cursor.HandCursorModule.activate = function (sense) {
+    return sense._enableModule(intel.realsense.cursor.HandCursorModule._CUID);
+};
+
+intel.realsense.cursor.CursorConfiguration = function (instance) {
+    this.instance = instance;
+    var self = this;
+
+    /* public members */
+    this.allGestures = false;
+    this.allAlerts = false;
+
+    /** Commit the configuration changes to the module
+        This method must be called in order for any configuration changes to actually apply
+        @return Promise object
+    */
+    this.applyChanges = function () {
+        return intel.realsense.connection.call(self.instance, 'PXCMCursorConfiguration_ApplyChanges', { 'configs': { 'allGestures': self.allGestures, 'allAlerts': self.allAlerts } });
+    };
+
+    this.release = function () {
+        return intel.realsense.connection.call(self.instance, 'PXCMCursorConfiguration_Release');
+    };
+};
+
+
+intel.realsense.cursor.CursorData = function (data) {
+    var self = this;
+    this._cursorsData = data;
+
+    this.numberOfCursors = 0;
+    if (this._cursorsData.cursors !== undefined)
+        this.numberOfCursors = this._cursorsData.cursors.length;
+
+    this.firedGestureData = data.gestures;
+    this.firedAlertData = data.alerts;
+};
+
+
+intel.realsense.cursor.CursorData.prototype.queryCursorData = function (accessOrder) {
+    if (this.numberOfCursors <= 0) return null;
+
+    var arrCursorData = [];
+    var k;
+    for (k = 0; k < this.numberOfCursors; k++)
+        arrCursorData[k] = new intel.realsense.cursor.CursorData.ICursor(this._cursorsData.cursors[k]);
+
+    return arrCursorData;
+};
+
+intel.realsense.cursor.CursorData.prototype.queryCursorDataById = function (cursorID) {
+    var index = -1;
+    for (i = 0; i < this.numberOfCursors; i++) {
+        if (this._cursorsData.cursors[index].uniqueId == cursorID) {
+            index = i;
+            break;
+        }
+    }
+    if (index >= 0)
+        return new intel.realsense.cursor.CursorData.ICursor(this._cursorsData.cursors[index]);
+    else
+        return null;
+};
+
+intel.realsense.cursor.BodySideType = {
+    BODY_SIDE_UNKNOWN: 0,     /// The hand-type was not determined
+    BODY_SIDE_LEFT: 1,        /// Left side of the body    
+    BODY_SIDE_RIGHT: 2        /// Right side of the body
+};
+
+intel.realsense.cursor.AlertType = {
+    CURSOR_DETECTED: 0x000001,     /// Cursor is detected      
+	CURSOR_NOT_DETECTED: 0x000002,   	///  A previously detected cursor is lost
+	CURSOR_INSIDE_BORDERS: 0x000004,      ///  Cursor is outside of the tracking boundaries
+    CURSOR_OUT_OF_BORDERS: 0x000008,      ///  Cursor has moved back inside the tracking boundaries   
+    CURSOR_TOO_CLOSE:	0x000010,      /// Cursor is too far
+    CURSOR_TOO_FAR: 0x000020,	    ///  Cursor is too close     
+    CURSOR_OUT_OF_LEFT_BORDER: 0x000040,      ///  The tracked object is touching the left border of the field of view
+    CURSOR_OUT_OF_RIGHT_BORDER: 0x000080,      ///  The tracked object is touching the right border of the field of view
+    CURSOR_OUT_OF_TOP_BORDER: 0x000100,      ///  The tracked object is touching the upper border of the field of view
+    CURSOR_OUT_OF_BOTTOM_BORDER: 0x000200,     ///  The tracked object is touching the lower border of the field of view
+    CURSOR_ENGAGED: 0x000400,		///	 The cursor entered engagement state and ready to interact with the application
+    CURSOR_DISENGAGED: 0x000800		///  The cursor has left the screen bounds or the engagement mode state
+}; 
+
+
+intel.realsense.cursor.CursorData.ICursor = function (data) {
+    var self = this;
+
+    if (data !== undefined) {
+        for (var key in data) {
+            this[key] = data[key];
+        }
+    }
+};
+
 
 intel.realsense.blob.BlobModule = function (instance, sense) {
     this.instance = instance;
@@ -929,7 +1070,16 @@ intel.realsense.blob.ExtremityType = {
     EXTREMITY_RIGHTMOST: 2,	    /// The right-most point of the tracked blob 
     EXTREMITY_TOPMOST: 3,		/// The top-most point of the tracked blob
     EXTREMITY_BOTTOMMOST: 4,	/// The bottom-most point of the tracked blob
-    EXTREMITY_CENTER: 5		    /// The center point of the tracked blob			
+    EXTREMITY_CENTER: 5,		    /// The center point of the tracked blob
+
+    /* 
+     * These names are added to match the corresponding enums
+     * in the other SDK languages.
+     */
+    EXTREMITY_LEFT_MOST: 1,	    
+    EXTREMITY_RIGHT_MOST: 2,
+    EXTREMITY_TOP_MOST: 3,
+    EXTREMITY_BOTTOM_MOST: 4
 };
 
 intel.realsense.blob.SegmentationImageType =
@@ -1322,12 +1472,11 @@ intel.realsense.SenseManager.detectPlatform = function (components, cameras) {
         } catch (err) {
             onerror();
         }
-        };
+    };
 
     try {
-        /* TODO: Check with Pranav if we need to use CORS on IE/Firefox. */
         xhr = new XMLHttpRequest();
-        xhr.open("GET", "https://192.55.233.1:5713/capabilityproxy/capabilities", true);
+        xhr.open("GET", "https://192.55.233.1/capabilityproxy/capabilities", true);
         xhr.onload = onReady;
         xhr.timeout = 5000;
         xhr.ontimeout = onerror;
@@ -1399,13 +1548,11 @@ ITAWSConnection = function (endpoint, options, listeners) {
     options.at = at;
     var PairCallback = function (err, rat) {
         if (err) {
-            //console.log("Error occurred while pairing: ", err);
             if (listeners.onerror)
                 listeners.onerror(err);
             return;
         }
         if (rat) {
-            //console.log("Got Rat. Start connection");
             self.default = {};
             self.default.endpoint = "ws://localhost:9000";
             self.default.realm = 'com.intel.api';
@@ -1438,7 +1585,6 @@ ITAWSConnection = function (endpoint, options, listeners) {
                 }
             };
 
-            //var ws = new self.wsConstructor(cnOptions);
             var ws = new autobahn.Connection(cnOptions);
 
             self.ws = ws;
@@ -1470,7 +1616,6 @@ ITAWSConnection = function (endpoint, options, listeners) {
 
 };
 
-// TODO this should be passing in a wamp lib adapter, not hardcoded
 /**
  * Runs after session
  */
@@ -1480,15 +1625,10 @@ ITAWSConnection.prototype.attachMethods = function () {
     self.call = (self.session) ? self.session.call : function () { };
     self.subscribe = (self.session) ? self.session.subscribe : function () { };
     self.session.SendRPC = function (procedureName, args, responseHandler) {
-        //console.log("Sending RPC...");
         if (typeof args === "string") {
-            //console.log("sending string");
-            //console.log(procedureName);
 
             // send string as single element array
             self.session.call(procedureName, [args]).then(function (res) {
-                //console.log(res);
-
                 return responseHandler(res);
             }, console.log);
         }
@@ -1527,14 +1667,11 @@ ITAWSConnection.prototype.wrapEvents = function () {
         self.attachMethods();
         self.ws._onopen(self.session);
     };
-    // TODO needs wrapper to work, wamp is rpc,pubsub not socket msg based
     self.ws.onmessage = function (e) {
         self.log("ITAWS ws message: " + e.data);
         self.ws._onmessage(session);
     };
     self.ws.onclose = function (e) {
-        //stop the heartbeats here
-        //self._stopHeartBeats();
         self.log("ITAWS ws session closed");
         self.ws._onclose(e);
     };
@@ -1543,7 +1680,6 @@ ITAWSConnection.prototype.wrapEvents = function () {
         self.ws._onerror(e);
     };
 
-    //self.ws = ws;
 }
 /**
  * Set the function to be used for constructing websockets
@@ -1570,11 +1706,9 @@ ITAWSConnection.prototype.setListeners = function (listeners) {
     if (!self.ws || typeof listeners !== "object") {
         throw "websocket property does not exist";
     }
-    //self.ws._onopen = listeners.onopen || self.ws._onopen || function(session) {
     self.ws._onopen = listeners.onopen || function (session) {
 
     };
-    /*TBD convenience fn - onmessage is not RPC,EVENT protocol (WAMP2 etc) */
     self.ws._onmessage = listeners.onmessage || self.ws._onmessage || noop;
     self.ws._onclose = listeners.onclose || self.ws._onclose || noop;
     self.ws._onerror = listeners.onerror || self.ws._onerror || noop;
@@ -1762,7 +1896,7 @@ intel.rest = function (method, url, options) {
 };
 
 GetResourceAccessToken = function (options, successCB, errorCB) {
-    var url = "https://192.55.233.1:5713/resourceaccesstoken";
+    var url = "https://192.55.233.1/resourceaccesstoken";
     var restRequest = intel.rest("POST", url, options);
     restRequest._execute(successCB, errorCB);
 };
@@ -1804,11 +1938,8 @@ function RealSenseConnection(major) {
         if (!("WebSocket" in window)) throw "WebSocket not available";
 
         if (this.websocket === null || this.wssession === null) { // Create WebSocket if not created or closed
-            //this.websocket = new WebSocket(this.socketUrl);
             console.log('No websocket. Create one.');
-            this.websocket = new ITAWS("wss://192.55.233.1:5713/", {
-                //send rat to bypass pairing
-                //rat: ".eyJhcGkta2V5IjoiamEyc2hhNzg4a3l4dHI4Nnk3OGhqZTlrdDUyNHpkYnVqZDY4IiwiY2FwIjpbInJlYWxzZW5zZS92MSJdLCJleHBjciI6MTQyMTI3NjM0OTk2NCwiZXhwbHAiOjE0NTI4MDY5NDk5NjQsImhlYWQiOiJJbnRlbCBDb3JwLCB2MiIsImlhdCI6MTQyMTI3MDk0OTk2NCwianRpIjoibmhEYnhZZUQiLCJub25jZSI6IkMyR0M3b05Vdi9JN1c0R1VMdmdneU11bFdYQlFPK1kzc1Z6VGM0STAraTA9IiwidGFyY3AiOlsiVFplZFRhQmJsVzhnalEva2t1aFcvcm1QK1BrREgwT3UrUGZBZ2tnck9mR2NIRnM1OWluM3RBTElEMzhkU3BOYjdrNWxnLzloM0EzZVZvYyt1amtyTEVXUEczdWgzZkZEZGwvZGVkZmoyaEFUc0RNY2NtWHp5VVZDOXFkWWZoY1pNeGlBYVYvRG53WkRoYzZvWDVINnJKY2ZRRzUwSXdnOElOTVJBdHNZWWxZV3greWxXbzYxUEJRVWpSazZFZ3BYS2QrYlFMQ2dMTXhtV2l4SkxSV1BqSHhnZ1Q3TGdtZTdpNEU5RlB0M0hmR3ZpN2RlWHFhaUJkeG5mbitUZ2pUWXorNFdDc3FDVGlIa1Myd2lHejRUdlA3TjNITU1JRWJuRW03R1ZpcFBJVm00MHgzOS9EajRlbmhORWVwTTVKeDN2SzFZZUQrQWg0NGNZYmlMdFRkK2N3PT0iXSwidGFyY3IiOlsiN2ExYjc0OWZkMjFjZWM2OWQwNmE1YTFkNGE4ZmJmOTAzNGMzNzg1YzQ0ZGMwZDkyMTk0ZjEwM2JjNzAzNmY1NmFkYjdjNDU2YmI2MDM2YWQ0NjY2MzYyMzE5MmVlN2JjNzc3NzViNThlNjhkNDFkMDUxMjhkZjkwZmY2N2Q0MjJlZWMzMmUyNWQxNDU4ZTZmMGY4NzkwNzllYTM1ODE2NWVlNTUwZjMwODI3ZWFkNDAzMmRkMDAyZjJkMTMwM2Y4OGI2ZjIwNjU2M2IyNTA5NjgxMDVlNDczMmUyYTMwNTNiNDFhZDA0MmQxOWQ1NDcwMWUyODUyYzdjODEwM2NkZmVlZGRkYTMxZTE3Yjg3MDY5NmE0YzVlNDcwZTk3YTM3ZDgzOTNkNGQyZDE1YTYwNjY4M2U1NmE2MzZmZjJhNjdlODY3NGNkZTViMmI4YzAxODYxNWZmZDUwOGM2YTEzNjkzNDhmOTFjZDBmNDllY2U5NjE0NTk0MTZhNzdlY2Y3MTcxMmI1OTgyN2FhODBhOWI1NGNlMGI3NzFiN2ExMDkzYWZiMDU2ZmNjMTVmNTIxOTEwNWFkNzk2NGUxYmRhMjEyZGU5NDEwMzFlMzk1ZDFiYTE3ZGE0ZTk0YmI5OTlhMDBmNWI0NTI5MGQwZmE2YWQ3OTIxNDVkZmZkNzIyMjAiXX0=."
+            this.websocket = new ITAWS("wss://192.55.233.1/", {
             },
                 {
                     "onopen": function (session, details) { console.log('Opened!'); self._onopen(session); },
@@ -1874,7 +2005,6 @@ function RealSenseConnection(major) {
 
     // Send queued messages when socket is open
     this._onopen = function (session) {
-        //self.onopen(session);
         this.wssession = session;
 
         //subscribe to the realsense events
@@ -1891,7 +2021,6 @@ function RealSenseConnection(major) {
     this._onmessage = function (event) {
         if (event.data instanceof ArrayBuffer) {
             this.binary_data = new Uint8Array(event.data);
-            //this.onmessage(event.data);
             return;
         }
 
