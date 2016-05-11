@@ -1111,7 +1111,7 @@ accordance with the terms of that agreement
         // dev link: https://rawgit.com/shacharoz/
         // production link (cached): https://cdn.rawgit.com/shacharoz/
 
-     $.getScript('https://rawgit.com/intel-realsense-extension-for-scratch/resources/master/intel/realsense.js')
+     $.getScript('https://rawgit.com/alan-donnelly/intel-realsense-extension-for-scratch/extension/realsense.js')
             .done(function(script, textStatus) {
              
                 dependencyAllCreated();
